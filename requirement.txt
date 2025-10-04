@@ -1,0 +1,6 @@
+earthaccess
+numpy
+pandas
+python-dotenv
+h5py
+nicegui
