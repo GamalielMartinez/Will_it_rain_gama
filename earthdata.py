@@ -43,8 +43,7 @@ print("=" * 70)
 granules = earthaccess.search_data(
     short_name='GPM_3IMERGHHE',  # GPM IMERG Half Hourly
     cloud_hosted=True,
-    bounding_box=(-100.0, 25.0, -85.0, 35.0),  # Región del Golfo de México
-    temporal=("2025-10-04", "2025-10-05"),  # Solo 1 día para ejemplo
+    temporal=("2025-10-01", "2025-10-05"),  # Solo 1 día para ejemplo
 )
 
 print(f"\nSe encontraron {len(granules)} archivos de precipitación.")
