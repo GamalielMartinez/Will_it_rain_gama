@@ -4,3 +4,6 @@ pandas
 python-dotenv
 h5py
 nicegui
+scikit-learn
+seaborn
+matplotlib
