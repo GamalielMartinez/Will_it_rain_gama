@@ -7,3 +7,4 @@ nicegui
 scikit-learn
 seaborn
 matplotlib
+uvicorn

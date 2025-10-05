@@ -2,6 +2,9 @@
 import earthaccess
 import os
 from dotenv import load_dotenv
+import pandas as pd
+import numpy as np
+import h5py
 
 load_dotenv()
 
@@ -71,50 +74,147 @@ print("\nArchivos descargados:")
 for file in downloaded_files:
     print(f"  - {file}")
 
-# Convertir HDF5 a CSV
+
+# Convertir archivos HDF5 a CSV con coordenadas y precipitación
 print("\n" + "=" * 70)
 print("CONVERSIÓN A CSV")
 print("=" * 70)
 
-import h5py
-import pandas as pd
-
-for file in downloaded_files:
+def convert_gpm_to_csv_with_coordinates(hdf5_file, output_file):
+    """
+    Convierte archivo GPM IMERG a CSV con coordenadas y precipitación
+    """
+    print(f"\n🔄 Procesando archivo: {os.path.basename(hdf5_file)}")
+    
     try:
-        print(f"\nProcesando: {os.path.basename(file)}")
-        
-        # Abrir archivo HDF5
-        with h5py.File(file, 'r') as hf:
-            # Extraer precipitación (variable principal)
-            precip_data = hf['Grid/precipitation'][:]
-            lat_data = hf['Grid/lat'][:]
-            lon_data = hf['Grid/lon'][:]
+        with h5py.File(hdf5_file, 'r') as f:
+            # Leer coordenadas
+            print("📍 Leyendo coordenadas...")
+            latitudes = f['Grid/lat'][:]
+            longitudes = f['Grid/lon'][:]
             
-            # Crear DataFrame con los datos
-            # Aplanar los datos de precipitación y crear coordenadas correspondientes
-            rows = []
-            for i in range(precip_data.shape[0]):
-                for j in range(precip_data.shape[1]):
-                    if precip_data[i, j] >= 0:  # Filtrar valores negativos (no data)
-                        rows.append({
-                            'lat': lat_data[i],
-                            'lon': lon_data[j],
-                            'precipitation_mm_hr': precip_data[i, j]
-                        })
+            print(f"   - Latitudes: {len(latitudes)} valores ({latitudes.min():.2f} a {latitudes.max():.2f})")
+            print(f"   - Longitudes: {len(longitudes)} valores ({longitudes.min():.2f} a {longitudes.max():.2f})")
             
-            df = pd.DataFrame(rows)
+            # Leer datos de precipitación
+            print("🌧️  Leyendo datos de precipitación...")
+            precipitation_data = f['Grid/precipitation'][:]
+            print(f"   - Forma de datos de precipitación: {precipitation_data.shape}")
             
-            # Guardar como CSV
-            csv_filename = file.replace('.HDF5', '.csv').replace('.nc4', '.csv')
-            df.to_csv(csv_filename, index=False)
-            print(f"  ✓ Convertido a CSV: {os.path.basename(csv_filename)}")
-            print(f"  ✓ Registros: {len(df)}")
+            # Crear meshgrid para coordenadas
+            print("🗺️  Creando meshgrid de coordenadas...")
+            lon_grid, lat_grid = np.meshgrid(longitudes, latitudes)
             
-            # Opcional: Eliminar archivo HDF5 original
-            os.remove(file)
-            print(f"  ✓ Archivo HDF5 eliminado")
-        
+            # Aplanar los arrays para crear el DataFrame
+            print("📊 Creando DataFrame...")
+            lat_flat = lat_grid.flatten()
+            lon_flat = lon_grid.flatten()
+            precip_flat = precipitation_data.flatten()
+            
+            # Crear DataFrame
+            df = pd.DataFrame({
+                'latitude': lat_flat,
+                'longitude': lon_flat,
+                'precipitation': precip_flat
+            })
+            
+            # Limpiar datos (remover valores inválidos)
+            print("🧹 Limpiando datos...")
+            initial_rows = len(df)
+            
+            # Remover NaN
+            df = df.dropna()
+            
+            # Remover valores de precipitación inválidos (valores de relleno típicos en GPM)
+            df = df[df['precipitation'] > -9999.0]  # Remover valores de relleno
+            df = df[df['precipitation'] < 1000.0]   # Remover valores extremadamente altos
+            
+            print(f"   - Filas iniciales: {initial_rows:,}")
+            print(f"   - Filas después de limpieza: {len(df):,}")
+            
+            # Estadísticas
+            total_points = len(df)
+            rain_points = len(df[df['precipitation'] > 0])
+            max_precip = df['precipitation'].max()
+            mean_precip = df[df['precipitation'] > 0]['precipitation'].mean() if rain_points > 0 else 0
+            
+            print(f"\n📈 Estadísticas:")
+            print(f"   - Total de puntos válidos: {total_points:,}")
+            print(f"   - Puntos con lluvia (>0): {rain_points:,} ({rain_points/total_points*100:.1f}%)")
+            print(f"   - Precipitación máxima: {max_precip:.4f} mm/hr")
+            print(f"   - Precipitación promedio (donde llueve): {mean_precip:.4f} mm/hr")
+            
+            # Guardar CSV
+            print(f"💾 Guardando CSV: {output_file}")
+            df.to_csv(output_file, index=False)
+            
+            # Mostrar muestra de datos
+            print(f"\n📋 Muestra de datos (primeras 10 filas):")
+            print(df.head(10).to_string(index=False))
+            
+            # Mostrar algunos puntos con lluvia si existen
+            if rain_points > 0:
+                rain_sample = df[df['precipitation'] > 0].head(5)
+                print(f"\n🌧️  Muestra de puntos con lluvia:")
+                print(rain_sample.to_string(index=False))
+            
+            print(f"\n✅ Conversión completada exitosamente!")
+            return df
+            
     except Exception as e:
-        print(f"  ✗ Error al procesar {file}: {e}")
+        print(f"❌ Error procesando archivo: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
 
-print("\n✓ Script completado exitosamente!")
+# Procesar archivos descargados
+if downloaded_files:
+    print(f"\n🔄 Procesando {len(downloaded_files)} archivos descargados...")
+    
+    csv_files = []
+    for i, file_path in enumerate(downloaded_files):
+        if os.path.exists(file_path):
+            # Crear nombre del archivo CSV de salida
+            base_name = os.path.splitext(os.path.basename(file_path))[0]
+            output_csv = f"precipitation_data_{base_name}.csv"
+            
+            print(f"\n{'='*60}")
+            print(f"ARCHIVO {i+1}/{len(downloaded_files)}")
+            print(f"{'='*60}")
+            
+            df = convert_gpm_to_csv_with_coordinates(file_path, output_csv)
+            if df is not None:
+                csv_files.append(output_csv)
+        else:
+            print(f"⚠️  Archivo no encontrado: {file_path}")
+    
+    # Resumen final
+    print(f"\n🎉 RESUMEN FINAL")
+    print("=" * 50)
+    print(f"📄 Archivos CSV generados: {len(csv_files)}")
+    
+    total_records = 0
+    total_rain_points = 0
+    
+    for csv_file in csv_files:
+        if os.path.exists(csv_file):
+            df_summary = pd.read_csv(csv_file)
+            rain_points = len(df_summary[df_summary['precipitation'] > 0])
+            total_records += len(df_summary)
+            total_rain_points += rain_points
+            
+            print(f"\n📊 {csv_file}:")
+            print(f"   - Total registros: {len(df_summary):,}")
+            print(f"   - Puntos con lluvia: {rain_points:,}")
+            print(f"   - Precipitación máxima: {df_summary['precipitation'].max():.4f} mm/hr")
+    
+    print(f"\n📈 ESTADÍSTICAS GLOBALES:")
+    print(f"   - Total de registros: {total_records:,}")
+    print(f"   - Total de puntos con lluvia: {total_rain_points:,}")
+    print(f"   - Porcentaje con lluvia: {total_rain_points/total_records*100:.2f}%")
+    
+    print(f"\n✅ ¡Archivos CSV listos para análisis!")
+    print(f"📁 Ubicación: {os.getcwd()}")
+    
+else:
+    print("❌ No hay archivos descargados para procesar")
