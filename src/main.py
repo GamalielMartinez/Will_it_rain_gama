@@ -8,7 +8,6 @@ from datetime import datetime
 import warnings
 warnings.filterwarnings('ignore')
 
-# Clase para predicción de lluvia
 class RainPredictor:
     def __init__(self, model_path='rain_prediction_model.joblib'):
         try:
@@ -17,15 +16,13 @@ class RainPredictor:
             self.scaler = model_data['scaler']
             self.feature_columns = model_data['feature_columns']
             self.loaded = True
-            print("✅ Modelo de predicción de lluvia cargado")
         except Exception as e:
-            print(f"⚠️ Modelo de predicción no disponible: {str(e)}")
             self.model = None
             self.loaded = False
     
     def predict_rain_probability(self, lat, lon, hour=None, minute=None):
         if not self.loaded:
-            return {"error": "Modelo no disponible", "category": "❌ Error"}
+            return {"error": "Modelo no disponible", "category": " Error"}
         
         if hour is None or minute is None:
             now = datetime.now()
@@ -52,7 +49,6 @@ class RainPredictor:
         if 'day_cos' in self.feature_columns:
             features['day_cos'] = np.cos(2 * np.pi * datetime.now().timetuple().tm_yday / 365)
         
-        # Características geográficas específicas
         if 'lat_center' in self.feature_columns:
             features['lat_center'] = lat
         if 'lon_center' in self.feature_columns:
@@ -61,16 +57,13 @@ class RainPredictor:
             features['lat_range'] = 10.0
         if 'lon_range' in self.feature_columns:
             features['lon_range'] = 15.0
+
+        lat_factor = (lat - 25.0) / 10.0  
+        lon_factor = (lon + 90.0) / 10.0  
+        hour_factor = hour / 24.0  
         
-        # Generar valores dinámicos basados en coordenadas y hora
-        # Usar funciones que varíen según la ubicación geográfica
-        lat_factor = (lat - 25.0) / 10.0  # Normalizar latitud relativa al Golfo de México
-        lon_factor = (lon + 90.0) / 10.0  # Normalizar longitud
-        hour_factor = hour / 24.0  # Factor horario
-        
-        # Factores geográficos para diferentes regiones
-        coastal_factor = 1.0 - min(abs(lat - 29.0) / 5.0, 1.0)  # Más cerca del centro del Golfo
-        tropical_factor = max(0, 1.0 - (lat - 20.0) / 15.0)  # Factor tropical (más al sur)
+        coastal_factor = 1.0 - min(abs(lat - 29.0) / 5.0, 1.0)  
+        tropical_factor = max(0, 1.0 - (lat - 20.0) / 15.0)  
         
         # Valores dinámicos basados en ubicación
         base_precip = 0.1 + (coastal_factor * 0.2) + (tropical_factor * 0.15)
@@ -133,27 +126,21 @@ class RainPredictor:
         X_pred_scaled = self.scaler.transform(X_pred)
         precip_prediction = max(0, self.model.predict(X_pred_scaled)[0])
         
-        # Calcular probabilidad exacta del modelo
-        threshold = 0.1  # mm/hr mínimo para considerar lluvia
-        scale_factor = 10.0  # Factor de escalamiento
+        threshold = 0.1  
+        scale_factor = 10.0  
         
-        # Probabilidad de que haya lluvia (>= threshold mm/hr)
         if precip_prediction <= 0.01:
             rain_probability = 0.0
         else:
-            # Función sigmoide modificada para meteorología
             sigmoid_input = (precip_prediction - threshold) * scale_factor
             rain_probability = 1 / (1 + np.exp(-sigmoid_input))
             rain_probability = min(max(rain_probability, 0.0), 1.0)
         
-        # Calcular probabilidad adicional basada en la magnitud de precipitación
         intensity_probability = min(precip_prediction / 5.0, 1.0)  # Normalizar a máximo 5 mm/hr
         
-        # Combinar ambas probabilidades (promedio ponderado)
         final_probability = (rain_probability * 0.7 + intensity_probability * 0.3)
         final_probability = min(max(final_probability, 0.0), 1.0)
         
-        # Categorización basada en la probabilidad exacta
         if final_probability >= 0.9:
             category = "�️ Lluvia Muy Fuerte"
         elif final_probability >= 0.7:
@@ -165,7 +152,6 @@ class RainPredictor:
         else:
             category = "☀️ Sin Lluvia"
         
-        # Formatear probabilidad como porcentaje exacto
         probability_percent = f"{final_probability * 100:.2f}%"
         
         return {
@@ -177,7 +163,6 @@ class RainPredictor:
             "time": f"{hour:02d}:{minute:02d}"
         }
 
-# Instancia global del predictor
 rain_predictor = RainPredictor()
 
 @ui.page('/',title="BAM - Build Manager",response_timeout=15)
@@ -194,7 +179,7 @@ async def header():
 def left_drawer():
      # Controles de hora para predicción
         with ui.left_drawer():
-            ui.label("🕒 Configuración de Hora para Predicción").classes('text-lg font-bold mb-2')
+            ui.label("Configuración de Hora para Predicción").classes('text-lg font-bold mb-2')
             
             with ui.row().classes('w-full items-center gap-4'):
                 # Selector de hora
@@ -297,13 +282,13 @@ async def map_entry():
                                 })
                                 .then(response => response.json())
                                 .then(data => {
-                                    let popupContent = '📍 <b>Coordenadas:</b><br>' +
+                                    let popupContent = ' <b>Coordenadas:</b><br>' +
                                                      'Lat: ' + lat.toFixed(6) + '<br>' +
                                                      'Lng: ' + lng.toFixed(6) + '<br><br>';
                                     
                                     if (data.error) {
-                                        popupContent += '❌ ' + data.error;
-                                        console.log('❌ Error en predicción: ' + data.error);
+                                        popupContent += ' ' + data.error;
+                                        console.log(' Error en predicción: ' + data.error);
                                     } else {
                                         // Crear barra de probabilidad visual
                                         let probDecimal = data.probability_decimal || 0;
@@ -315,11 +300,7 @@ async def map_entry():
                                                        data.category + '<br><br>' +
                                                        '<b>💧 Precipitación:</b> ' + data.precipitation_mm_hr + ' mm/hr<br>' +
                                                        '<b>📊 Probabilidad:</b> ' + data.probability + '<br>' +
-                                                       progressBar +
-                                                       '<b>🕒 Hora predicción:</b> ' + selectedHour.toString().padStart(2, '0') + ':' + selectedMinute.toString().padStart(2, '0') + '<br>' +
-                                                       '<b>⏰ Tiempo modelo:</b> ' + data.time + '<br><br>' +
-                                                       '<small>🎯 Confianza del modelo: ' + (data.probability_decimal * 100).toFixed(1) + '%</small>';
-                                        
+                                                       progressBar 
                                         console.log('🌧️ PREDICCIÓN DETALLADA:');
                                         console.log('Ubicación: [' + lat.toFixed(6) + ', ' + lng.toFixed(6) + ']');
                                         console.log('Hora seleccionada: ' + selectedHour.toString().padStart(2, '0') + ':' + selectedMinute.toString().padStart(2, '0'));
@@ -342,7 +323,7 @@ async def map_entry():
                                     console.error('Error en predicción:', error);
                                     L.popup()
                                         .setLatLng(e.latlng)
-                                        .setContent('📍 <b>Coordenadas:</b><br>Lat: ' + lat.toFixed(6) + '<br>Lng: ' + lng.toFixed(6) + '<br><br>❌ Error en predicción')
+                                        .setContent(' <b>Coordenadas:</b><br>Lat: ' + lat.toFixed(6) + '<br>Lng: ' + lng.toFixed(6) + '<br><br>❌ Error en predicción')
                                         .openOn(map);
                                 });
                             });
@@ -390,7 +371,6 @@ async def map_entry():
                 ui.label("⚠️ Predicción de lluvia no disponible").classes('text-orange font-bold')
         
 
-# Endpoint para las predicciones AJAX
 from fastapi import Request
 import json
 
